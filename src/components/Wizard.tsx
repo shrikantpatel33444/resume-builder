@@ -71,8 +71,6 @@ export default function Wizard({ onComplete, onCancel }: Props) {
     setGenerating(true);
     await new Promise((res) => setTimeout(res, 400));
     let base: ResumeData;
-    let useGroq = false;
-    (() => { try { useGroq = !!localStorage.getItem('groq_api_key'); } catch {} })();
 
     if (parsedResume && method === 'upload') {
       base = JSON.parse(JSON.stringify(parsedResume));
@@ -105,7 +103,7 @@ export default function Wizard({ onComplete, onCancel }: Props) {
     }
 
     try {
-      if (useGroq && keywords) {
+      if (keywords) {
         const allKw = [...keywords.critical, ...keywords.important];
         const expInput = base.experience.map(e => ({
           title: e.title, company: e.company, years: e.startDate || '', bullets: e.bullets,

@@ -1,51 +1,20 @@
-const GROQ_BASE = 'https://api.groq.com/openai/v1';
+const API = '/api/groq';
 
-function getKey(): string | null {
-  try {
-    return localStorage.getItem('groq_api_key');
-  } catch { return null; }
-}
-
-function systemPrompt(role: string): string {
-  return `You are an expert ATS resume writer. You specialize in writing resumes that score 95%+ on Applicant Tracking Systems (Workday, Greenhouse, Lever, Taleo, iCIMS, etc.).
-
-Rules:
-- Use strong action verbs (led, built, optimized, designed, implemented, etc.)
-- Include quantifiable metrics (percentages, dollar amounts, time saved, etc.)
-- Integrate job-specific keywords naturally
-- Keep each bullet to 1-2 lines
-- Use proper capitalization and punctuation
-- Never use emoji or special characters
-- Return ONLY valid JSON, no markdown, no explanation
-
-Your task: ${role}`;
-}
-
-async function groqChat(messages: { role: string; content: string }[]): Promise<string> {
-  const key = getKey();
-  if (!key) throw new Error('Groq API key not set');
-
-  const res = await fetch(`${GROQ_BASE}/chat/completions`, {
+async function callAPI(action: string, messages: { role: string; content: string }[], parseJson = false): Promise<string> {
+  const res = await fetch(API, {
     method: 'POST',
-    headers: { 'Authorization': `Bearer ${key}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: 'llama-3.3-70b-versatile',
-      messages: [
-        { role: 'system', content: messages[0]?.role === 'system' ? messages[0].content : '' },
-        ...messages.filter(m => m.role !== 'system')
-      ],
-      temperature: 0.7,
-      max_tokens: 4096,
-    }),
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ action, messages }),
   });
 
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Groq API error (${res.status}): ${err}`);
+    const err = await res.json().catch(() => ({ error: 'Request failed' }));
+    throw new Error(err.error || `API error (${res.status})`);
   }
 
   const data = await res.json();
-  return data.choices?.[0]?.message?.content || '';
+  if (parseJson) return data.content;
+  return data.content || '';
 }
 
 export async function rewriteBullet(bullet: string, keyword: string | undefined): Promise<string> {
@@ -54,10 +23,7 @@ export async function rewriteBullet(bullet: string, keyword: string | undefined)
 Bullet: "${bullet}"
 
 Return ONLY the rewritten bullet as a plain string, no explanation.`;
-  const text = await groqChat([
-    { role: 'system', content: systemPrompt('Rewrite resume bullet points to be ATS-optimized with action verbs and metrics.') },
-    { role: 'user', content: prompt },
-  ]);
+  const text = await callAPI('bullet', [{ role: 'user', content: prompt }]);
   return text.replace(/^["']|["']$/g, '').trim() || bullet;
 }
 
@@ -76,11 +42,7 @@ Current summary (rewrite this): "${currentSummary}"
 Candidate name: ${name}
 
 Return ONLY the summary text (3-4 sentences), no explanation, no JSON.`;
-  const text = await groqChat([
-    { role: 'system', content: systemPrompt('Write ATS-optimized professional summaries.') },
-    { role: 'user', content: prompt },
-  ]);
-  return text.replace(/^["']|["']$/g, '').trim() || currentSummary;
+  return await callAPI('summary', [{ role: 'user', content: prompt }]);
 }
 
 export async function generateResume(
@@ -115,10 +77,7 @@ Return JSON ONLY (no markdown, no explanation) with this structure:
   "skills": ["technical skills", "in", "priority", "order"]
 }`;
 
-  const text = await groqChat([
-    { role: 'system', content: systemPrompt('Generate complete ATS-optimized resumes from job descriptions.') },
-    { role: 'user', content: prompt },
-  ]);
+  const text = await callAPI('generate', [{ role: 'user', content: prompt }], true);
 
   try {
     const parsed = JSON.parse(text);
@@ -152,10 +111,8 @@ Analyze what's missing and return this EXACT JSON structure:
 }
 
 Return ONLY valid JSON, no markdown.`;
-  const text = await groqChat([
-    { role: 'system', content: systemPrompt('Analyze and fix ATS resume issues to score 95%+.') },
-    { role: 'user', content: prompt },
-  ]);
+
+  const text = await callAPI('autofix', [{ role: 'user', content: prompt }], true);
 
   try {
     return JSON.parse(text);
@@ -181,8 +138,5 @@ Experience highlights:
 ${bullets}
 
 Return ONLY the cover letter text (3-4 paragraphs), no explanation.`;
-  return await groqChat([
-    { role: 'system', content: systemPrompt('Write professional cover letters.') },
-    { role: 'user', content: prompt },
-  ]);
+  return await callAPI('cover', [{ role: 'user', content: prompt }]);
 }

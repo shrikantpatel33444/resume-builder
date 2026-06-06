@@ -106,30 +106,24 @@ export default function Editor({ initial, onBack }: Props) {
     setFixing(true);
     await new Promise((r) => setTimeout(r, 400));
     try {
-      const apiKey = (() => { try { return localStorage.getItem('groq_api_key'); } catch { return null; } })();
-      if (apiKey) {
-        const allBullets = resume.experience.flatMap(e => e.bullets).join('\n');
-        const resumeText = `Job Title: ${resume.targetJobTitle || 'Professional'}\nSummary: ${resume.summary}\nExperience Bullets:\n${allBullets}\nSkills: ${[...resume.skills.technical, ...resume.skills.soft, ...resume.skills.tools].join(', ')}`;
-        const allKw = [...keywords.critical, ...keywords.important];
-        const result = await groq.autoFixResume(resumeText, allKw, report.percent);
-        const fixed = { ...resume };
-        if (result.summary) fixed.summary = result.summary;
-        if (result.skills.length) {
-          const tech = result.skills.filter(s => !['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase()));
-          const soft = result.skills.filter(s => ['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase()));
-          fixed.skills = { ...fixed.skills, technical: tech.slice(0, 15), soft: soft.slice(0, 8) };
-        }
-        if (Object.keys(result.experienceBullets).length) {
-          fixed.experience = fixed.experience.map((exp, i) => {
-            const newBullets = result.experienceBullets[i];
-            return newBullets ? { ...exp, bullets: newBullets.slice(0, 6) } : exp;
-          });
-        }
-        updateResume(fixed);
-      } else {
-        const { resume: fixed } = autoFixRuleBased(resume, keywords, 96);
-        updateResume(fixed);
+      const allBullets = resume.experience.flatMap(e => e.bullets).join('\n');
+      const resumeText = `Job Title: ${resume.targetJobTitle || 'Professional'}\nSummary: ${resume.summary}\nExperience Bullets:\n${allBullets}\nSkills: ${[...resume.skills.technical, ...resume.skills.soft, ...resume.skills.tools].join(', ')}`;
+      const allKw = [...keywords.critical, ...keywords.important];
+      const result = await groq.autoFixResume(resumeText, allKw, report.percent);
+      const fixed = { ...resume };
+      if (result.summary) fixed.summary = result.summary;
+      if (result.skills.length) {
+        const tech = result.skills.filter(s => !['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase()));
+        const soft = result.skills.filter(s => ['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase()));
+        fixed.skills = { ...fixed.skills, technical: tech.slice(0, 15), soft: soft.slice(0, 8) };
       }
+      if (Object.keys(result.experienceBullets).length) {
+        fixed.experience = fixed.experience.map((exp, i) => {
+          const newBullets = result.experienceBullets[i];
+          return newBullets ? { ...exp, bullets: newBullets.slice(0, 6) } : exp;
+        });
+      }
+      updateResume(fixed);
     } catch {
       const { resume: fixed } = autoFixRuleBased(resume, keywords, 96);
       updateResume(fixed);
@@ -541,21 +535,16 @@ function CoverLetterPanel({ resume, keywords }: { resume: ResumeData; keywords: 
   const regenerate = async () => {
     setGenerating(true);
     try {
-      const apiKey = (() => { try { return localStorage.getItem('groq_api_key'); } catch { return null; } })();
-      if (apiKey) {
-        const allKw = [...keywords.critical, ...keywords.important];
-        const allBullets = resume.experience.flatMap(e => e.bullets);
-        const result = await groq.generateCoverLetter(
-          resume.contact.fullName,
-          resume.targetJobTitle || 'Professional',
-          allKw,
-          resume.summary,
-          allBullets
-        );
-        setText(result);
-      } else {
-        setText(coverLetterRuleBased(resume, keywords));
-      }
+      const allKw = [...keywords.critical, ...keywords.important];
+      const allBullets = resume.experience.flatMap(e => e.bullets);
+      const result = await groq.generateCoverLetter(
+        resume.contact.fullName,
+        resume.targetJobTitle || 'Professional',
+        allKw,
+        resume.summary,
+        allBullets
+      );
+      setText(result);
     } catch {
       setText(coverLetterRuleBased(resume, keywords));
     }
