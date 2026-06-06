@@ -1,5 +1,4 @@
 import { createServer } from 'http';
-import { readFileSync } from 'fs';
 
 const PORT = 3001;
 const GROQ_BASE = 'https://api.groq.com/openai/v1/chat/completions';
