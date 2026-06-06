@@ -1,6 +1,6 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Languages, SpellCheck, Sparkles, Lightbulb, CheckCircle2, AlertCircle, X, Send } from 'lucide-react';
+import { Languages, SpellCheck, Sparkles, Lightbulb, CheckCircle2, AlertCircle, X, Send, Key, Eye, EyeOff, Check, AlertTriangle } from 'lucide-react';
 import type { ResumeData } from '../../types';
 import { Card } from './controls';
 
@@ -135,6 +135,13 @@ export default function AIToolsPanel({ resume, onChange }: Props) {
   const [showModal, setShowModal] = useState(false);
   const [feedback, setFeedback] = useState('');
   const [feedbackSent, setFeedbackSent] = useState(false);
+  const [apiKey, setApiKey] = useState(() => { try { return localStorage.getItem('groq_api_key') || ''; } catch { return ''; } });
+  const [showKey, setShowKey] = useState(false);
+  const [keySaved, setKeySaved] = useState(false);
+
+  const saveKey = () => {
+    try { localStorage.setItem('groq_api_key', apiKey); setKeySaved(true); setTimeout(() => setKeySaved(false), 2000); } catch {}
+  };
 
   const issues = useMemo(() => (checked ? findIssues(resume) : []), [resume, checked]);
 
@@ -161,6 +168,56 @@ export default function AIToolsPanel({ resume, onChange }: Props) {
 
   return (
     <div className="space-y-3">
+      {/* GROQ API KEY CARD */}
+      <Card className={`p-4 ${apiKey ? 'bg-gradient-to-br from-emerald-50 to-teal-50 border-emerald-200' : 'bg-gradient-to-br from-amber-50 to-orange-50 border-amber-200'}`}>
+        <div className="flex items-start gap-3 mb-3">
+          <div className={`w-10 h-10 rounded-lg ${apiKey ? 'bg-emerald-500' : 'bg-amber-500'} text-white flex items-center justify-center shrink-0`}>
+            <Key className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className="font-bold text-slate-900 text-sm">Groq AI Engine</h3>
+              {apiKey ? (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-100 text-emerald-700">Connected</span>
+              ) : (
+                <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Key required</span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mt-0.5">Get a free API key from <b>console.groq.com/keys</b> (no credit card needed)</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <input
+              type={showKey ? 'text' : 'password'}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder="gsk_..."
+              className="w-full bg-white border border-slate-200 rounded-lg pl-3 pr-10 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <button
+              onClick={() => setShowKey(!showKey)}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
+              tabIndex={-1}
+            >
+              {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+            </button>
+          </div>
+          <button
+            onClick={saveKey}
+            disabled={!apiKey.trim()}
+            className={`px-4 py-2 rounded-lg text-sm font-semibold text-white transition disabled:opacity-50 ${apiKey ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-amber-500 hover:bg-amber-600'}`}
+          >
+            {keySaved ? <><Check className="w-4 h-4 inline mr-1" />Saved</> : 'Save Key'}
+          </button>
+        </div>
+        {!apiKey && (
+          <div className="flex items-center gap-1.5 mt-2 text-[10px] text-amber-600">
+            <AlertTriangle className="w-3 h-3" /> AI features need a Groq API key to work
+          </div>
+        )}
+      </Card>
+
       {/* TRANSLATE CARD */}
       <Card className="p-4">
         <div className="flex items-start gap-3 mb-3">

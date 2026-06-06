@@ -4,7 +4,8 @@ import { ArrowRight, ArrowLeft, FileUp, Pencil, Link2, Sparkles, X, Globe2 } fro
 import type { Country, ResumeData } from '../types';
 import { extractKeywords, extractJobTitle } from '../lib/keywords';
 import { scoreResume } from '../lib/atsEngine';
-import { generateResume } from '../lib/aiGenerator';
+import { generateResume as generateRuleBased } from '../lib/aiGenerator';
+import * as groq from '../lib/groq';
 import { emptyResume, SAMPLE_JOB_DESCRIPTION } from '../lib/sampleData';
 import { COUNTRY_FLAGS } from '../lib/format';
 import { parseCv } from '../lib/cvParser';
@@ -69,8 +70,10 @@ export default function Wizard({ onComplete, onCancel }: Props) {
   const handleGenerate = async () => {
     setGenerating(true);
     await new Promise((res) => setTimeout(res, 400));
-    // Start from parsed CV if available, else build a base from manual fields
     let base: ResumeData;
+    let useGroq = false;
+    (() => { try { useGroq = !!localStorage.getItem('groq_api_key'); } catch {} })();
+
     if (parsedResume && method === 'upload') {
       base = JSON.parse(JSON.stringify(parsedResume));
       base.country = country;
@@ -101,9 +104,41 @@ export default function Wizard({ onComplete, onCancel }: Props) {
       base.education = [{ id: 'ed1', degree: "Bachelor's Degree", school: 'University', location: base.contact.location, startDate: `${now.getFullYear() - years - 4}-09`, endDate: `${now.getFullYear() - years}-05` }];
     }
 
-    const generated = generateResume(base, keywords!);
+    try {
+      if (useGroq && keywords) {
+        const allKw = [...keywords.critical, ...keywords.important];
+        const expInput = base.experience.map(e => ({
+          title: e.title, company: e.company, years: e.startDate || '', bullets: e.bullets,
+        }));
+        const result = await groq.generateResume(
+          base.targetJobTitle || 'Professional',
+          base.jobDescription || '',
+          allKw,
+          base.contact.fullName,
+          expInput,
+        );
+        if (result.summary) base.summary = result.summary;
+        if (result.skills.length) {
+          base.skills = {
+            technical: result.skills.filter(s => !['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase())).slice(0, 15),
+            soft: result.skills.filter(s => ['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase())).slice(0, 8),
+            tools: base.skills.tools, languages: base.skills.languages,
+          };
+        }
+        result.bullets.forEach((bullets, i) => {
+          if (bullets?.length && base.experience[i]) base.experience[i].bullets = bullets.slice(0, 6);
+        });
+      } else {
+        const generated = generateRuleBased(base, keywords!);
+        base = generated;
+      }
+    } catch {
+      const generated = generateRuleBased(base, keywords!);
+      base = generated;
+    }
+
     setGenerating(false);
-    onComplete(generated);
+    onComplete(base);
   };
 
   const useSampleJD = () => setJd(SAMPLE_JOB_DESCRIPTION);

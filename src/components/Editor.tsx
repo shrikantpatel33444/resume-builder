@@ -4,7 +4,8 @@ import { ArrowLeft, Download, FileText, Eye, Bot, Wand2, FileDown, Share2, Layer
 import type { ResumeData } from '../types';
 import { extractKeywords } from '../lib/keywords';
 import { scoreResume } from '../lib/atsEngine';
-import { autoFixResume, generateCoverLetter } from '../lib/aiGenerator';
+import { autoFixResume as autoFixRuleBased, generateCoverLetter as coverLetterRuleBased } from '../lib/aiGenerator';
+import * as groq from '../lib/groq';
 import ATSScoreDashboard from './ATSScoreDashboard';
 import ResumePreview from './ResumePreview';
 import ResumeCanvas from './ResumeCanvas';
@@ -104,8 +105,35 @@ export default function Editor({ initial, onBack }: Props) {
   const runAutoFix = async () => {
     setFixing(true);
     await new Promise((r) => setTimeout(r, 400));
-    const { resume: fixed } = autoFixResume(resume, keywords, 96);
-    updateResume(fixed);
+    try {
+      const apiKey = (() => { try { return localStorage.getItem('groq_api_key'); } catch { return null; } })();
+      if (apiKey) {
+        const allBullets = resume.experience.flatMap(e => e.bullets).join('\n');
+        const resumeText = `Job Title: ${resume.targetJobTitle || 'Professional'}\nSummary: ${resume.summary}\nExperience Bullets:\n${allBullets}\nSkills: ${[...resume.skills.technical, ...resume.skills.soft, ...resume.skills.tools].join(', ')}`;
+        const allKw = [...keywords.critical, ...keywords.important];
+        const result = await groq.autoFixResume(resumeText, allKw, report.percent);
+        const fixed = { ...resume };
+        if (result.summary) fixed.summary = result.summary;
+        if (result.skills.length) {
+          const tech = result.skills.filter(s => !['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase()));
+          const soft = result.skills.filter(s => ['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase()));
+          fixed.skills = { ...fixed.skills, technical: tech.slice(0, 15), soft: soft.slice(0, 8) };
+        }
+        if (Object.keys(result.experienceBullets).length) {
+          fixed.experience = fixed.experience.map((exp, i) => {
+            const newBullets = result.experienceBullets[i];
+            return newBullets ? { ...exp, bullets: newBullets.slice(0, 6) } : exp;
+          });
+        }
+        updateResume(fixed);
+      } else {
+        const { resume: fixed } = autoFixRuleBased(resume, keywords, 96);
+        updateResume(fixed);
+      }
+    } catch {
+      const { resume: fixed } = autoFixRuleBased(resume, keywords, 96);
+      updateResume(fixed);
+    }
     setFixing(false);
   };
 
@@ -502,15 +530,38 @@ function TemplateSwitcher({ resume, onChange, onBrowseAll }: { resume: ResumeDat
    ContentEditor mounted in the Content tab (see src/components/customize/ContentEditor.tsx). */
 
 function CoverLetterPanel({ resume, keywords }: { resume: ResumeData; keywords: ReturnType<typeof extractKeywords> }) {
-  const [text, setText] = useState(() => generateCoverLetter(resume, keywords));
+  const [text, setText] = useState(() => coverLetterRuleBased(resume, keywords));
   const [edited, setEdited] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
-  // Auto-refresh letter when resume changes — but only if user hasn't manually edited it.
   useEffect(() => {
-    if (!edited) setText(generateCoverLetter(resume, keywords));
-  }, [resume, keywords, edited]);
+    if (!edited && !generating) setText(coverLetterRuleBased(resume, keywords));
+  }, [resume, keywords, edited, generating]);
 
-  const regenerate = () => { setText(generateCoverLetter(resume, keywords)); setEdited(false); };
+  const regenerate = async () => {
+    setGenerating(true);
+    try {
+      const apiKey = (() => { try { return localStorage.getItem('groq_api_key'); } catch { return null; } })();
+      if (apiKey) {
+        const allKw = [...keywords.critical, ...keywords.important];
+        const allBullets = resume.experience.flatMap(e => e.bullets);
+        const result = await groq.generateCoverLetter(
+          resume.contact.fullName,
+          resume.targetJobTitle || 'Professional',
+          allKw,
+          resume.summary,
+          allBullets
+        );
+        setText(result);
+      } else {
+        setText(coverLetterRuleBased(resume, keywords));
+      }
+    } catch {
+      setText(coverLetterRuleBased(resume, keywords));
+    }
+    setEdited(false);
+    setGenerating(false);
+  };
 
   const download = () => {
     const safe = (resume.contact.fullName || 'CoverLetter').replace(/[^\w]+/g, '_');
@@ -530,7 +581,7 @@ function CoverLetterPanel({ resume, keywords }: { resume: ResumeData; keywords: 
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 mb-3">
         <h3 className="font-bold text-slate-900">AI Cover Letter — ATS Optimized</h3>
         <div className="flex gap-2 flex-wrap">
-          <button onClick={regenerate} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 flex items-center gap-1"><Wand2 className="w-3 h-3" /> Regenerate</button>
+          <button onClick={regenerate} disabled={generating} className="text-xs px-3 py-1.5 rounded-lg bg-indigo-50 text-indigo-700 hover:bg-indigo-100 disabled:opacity-50 flex items-center gap-1"><Wand2 className={`w-3 h-3 ${generating ? 'animate-pulse' : ''}`} /> {generating ? 'Generating…' : 'Regenerate'}</button>
           <button onClick={download} className="text-xs px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 flex items-center gap-1"><Download className="w-3 h-3" /> Download .txt</button>
         </div>
       </div>
