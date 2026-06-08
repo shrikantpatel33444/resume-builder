@@ -288,12 +288,12 @@ export default function Editor({ initial, onBack }: Props) {
 
         {/* Tabs — always visible (mobile + desktop) */}
         <div className="border-t border-slate-100 px-3 sm:px-4 max-w-[1600px] mx-auto">
-          <div className="flex bg-slate-50 rounded-lg p-1 my-2 text-xs font-medium overflow-x-auto">
+          <div className="flex bg-slate-50 rounded-lg p-1 my-2 text-xs font-medium overflow-x-auto tab-scroll gap-1">
             {TABS.map((t) => (
               <button
                 key={t.k}
                 onClick={() => setTab(t.k)}
-                className={`flex-1 min-w-0 px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 whitespace-nowrap transition ${
+                className={`max-lg:flex-none lg:flex-1 px-3 py-1.5 rounded-md flex items-center justify-center gap-1.5 whitespace-nowrap transition ${
                   tab === t.k ? 'bg-white shadow text-indigo-700' : 'text-slate-600 hover:text-slate-900'
                 }`}
               >
