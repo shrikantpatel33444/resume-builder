@@ -55,7 +55,7 @@ export default async function handler(req: any, res: any) {
     const content = data.choices?.[0]?.message?.content || '';
 
     return res.status(200).json({ content });
-  } catch (err) {
+  } catch (err: any) {
     return res.status(500).json({ error: err.message || 'Internal server error' });
   }
 }
