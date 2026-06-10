@@ -1,4 +1,4 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+
 
 const GROQ_BASE = 'https://api.groq.com/openai/v1/chat/completions';
 
@@ -10,7 +10,7 @@ const SYSTEM_PROMPTS: Record<string, string> = {
   cover: `You are an expert professional writer. Write ATS-optimized cover letters (3-4 paragraphs). Return ONLY the letter text, no explanation.`,
 };
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
+export default async function handler(req: any, res: any) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const content = data.choices?.[0]?.message?.content || '';
 
     return res.status(200).json({ content });
-  } catch (err: any) {
+  } catch (err) {
     return res.status(500).json({ error: err.message || 'Internal server error' });
   }
 }
