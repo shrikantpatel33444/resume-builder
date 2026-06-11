@@ -25,6 +25,10 @@ import { saveResume, recordScore } from '../lib/storage';
 import { TEMPLATES } from '../lib/sampleData';
 import { customizationFromTemplate } from '../lib/customization';
 import { ATS_DOWNLOAD_THRESHOLD, MAX_HISTORY_ENTRIES } from '../lib/constants';
+import { jsPDF } from 'jspdf';
+import html2canvas from 'html2canvas';
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'docx';
+import { saveAs } from 'file-saver';
 
 interface Props {
   initial: ResumeData;
@@ -199,6 +203,92 @@ export default function Editor({ initial, onBack }: Props) {
     }
   };
 
+  const handleDownloadPdfDirect = async () => {
+    setPrintVariant('visual');
+    await new Promise((r) => setTimeout(r, 300));
+    try {
+      const el = printContainerRef.current;
+      if (!el) { setPrintVariant(null); return; }
+      const canvas = await html2canvas(el, { scale: 2, useCORS: true, logging: false, backgroundColor: '#ffffff' });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfW = pdf.internal.pageSize.getWidth();
+      const pdfH = (canvas.height * pdfW) / canvas.width;
+      let pos = 0;
+      pdf.addImage(imgData, 'PNG', 0, pos, pdfW, pdfH);
+      const pageH = pdf.internal.pageSize.getHeight();
+      if (pdfH > pageH) {
+        const totalPages = Math.ceil(pdfH / pageH);
+        for (let i = 1; i < totalPages; i++) {
+          pos = -pageH * i;
+          pdf.addPage();
+          pdf.addImage(imgData, 'PNG', 0, pos, pdfW, pdfH);
+        }
+      }
+      pdf.save(`${safeFileName}.pdf`);
+    } catch (err) {
+      console.error('PDF generation failed:', err);
+      handleDownloadPdf('visual');
+    } finally {
+      setPrintVariant(null);
+    }
+  };
+
+  const handleDownloadDocx = async () => {
+    const r = resume;
+    const children: any[] = [];
+    children.push(
+      new Paragraph({ text: r.contact.fullName || 'Resume', heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER }),
+      new Paragraph({
+        children: [new TextRun({ text: [r.contact.email, r.contact.phone, r.contact.location, r.contact.linkedin].filter(Boolean).join(' | '), size: 20 })],
+        alignment: AlignmentType.CENTER, spacing: { after: 300 },
+      }),
+    );
+    if (r.summary) {
+      children.push(new Paragraph({ text: 'PROFESSIONAL SUMMARY', heading: HeadingLevel.HEADING_1 }));
+      children.push(new Paragraph({ text: r.summary, spacing: { after: 200 } }));
+    }
+    if (r.experience.length > 0) {
+      children.push(new Paragraph({ text: 'WORK EXPERIENCE', heading: HeadingLevel.HEADING_1 }));
+      for (const e of r.experience) {
+        children.push(new Paragraph({ text: `${e.title} — ${e.company} (${e.startDate} to ${e.endDate})`, heading: HeadingLevel.HEADING_2 }));
+        for (const b of e.bullets) {
+          children.push(new Paragraph({ text: b, bullet: { level: 0 }, spacing: { after: 40 } }));
+        }
+      }
+    }
+    if (r.education.length > 0) {
+      children.push(new Paragraph({ text: 'EDUCATION', heading: HeadingLevel.HEADING_1 }));
+      for (const e of r.education) {
+        children.push(new Paragraph({ text: `${e.degree} — ${e.school}${e.location ? `, ${e.location}` : ''} (${e.startDate} to ${e.endDate})`, spacing: { after: 80 } }));
+      }
+    }
+    const skillLines: string[] = [];
+    if (r.skills.technical.length) skillLines.push(`Technical: ${r.skills.technical.join(', ')}`);
+    if (r.skills.tools.length) skillLines.push(`Tools: ${r.skills.tools.join(', ')}`);
+    if (r.skills.soft.length) skillLines.push(`Soft Skills: ${r.skills.soft.join(', ')}`);
+    if (r.skills.languages.length) skillLines.push(`Languages: ${r.skills.languages.join(', ')}`);
+    if (skillLines.length > 0) {
+      children.push(new Paragraph({ text: 'SKILLS', heading: HeadingLevel.HEADING_1 }));
+      for (const s of skillLines) children.push(new Paragraph({ text: s, spacing: { after: 60 } }));
+    }
+    if (r.projects.length > 0) {
+      children.push(new Paragraph({ text: 'PROJECTS', heading: HeadingLevel.HEADING_1 }));
+      for (const p of r.projects) {
+        children.push(new Paragraph({ text: `${p.name}${p.tech ? ` (${p.tech})` : ''}${p.description ? ` — ${p.description}` : ''}`, spacing: { after: 60 } }));
+      }
+    }
+    if (r.certifications.length > 0) {
+      children.push(new Paragraph({ text: 'CERTIFICATIONS', heading: HeadingLevel.HEADING_1 }));
+      for (const c of r.certifications) {
+        children.push(new Paragraph({ text: `${c.name}${c.issuer ? ` — ${c.issuer}` : ''}${c.date ? ` (${c.date})` : ''}`, spacing: { after: 60 } }));
+      }
+    }
+    const doc = new Document({ sections: [{ children }] });
+    const blob = await Packer.toBlob(doc);
+    saveAs(blob, `${safeFileName}.docx`);
+  };
+
   const TABS: { k: Tab; label: string; icon: React.ReactNode }[] = [
     { k: 'overview',  label: 'Overview',  icon: <LayoutDashboard className="w-3.5 h-3.5" /> },
     { k: 'edit',      label: 'Content',   icon: <FileText className="w-3.5 h-3.5" /> },
@@ -282,6 +372,9 @@ export default function Editor({ initial, onBack }: Props) {
                   <DownloadItem icon={<FileDown className="text-indigo-600" />} title="Visual PDF" desc="For email / in-person" onClick={() => { setShowDownload(false); handleDownloadPdf('visual'); }} />
                   <DownloadItem icon={<FileText className="text-slate-600" />} title="Plain Text (.txt)" desc="Most ATS-friendly" onClick={() => { setShowDownload(false); handleDownloadTxt(); }} />
                   <DownloadItem icon={<Share2 className="text-violet-600" />} title="Share Link" desc="Send to recruiters" onClick={() => { setShowDownload(false); handleShare(); }} />
+                  <div className="border-t border-slate-100 my-1" />
+                  <DownloadItem icon={<FileDown className="text-rose-600" />} title="Download PDF" desc="Proper PDF (html2canvas + jsPDF)" onClick={() => { setShowDownload(false); handleDownloadPdfDirect(); }} />
+                  <DownloadItem icon={<FileText className="text-blue-600" />} title="Download DOCX" desc="Word document (docx)" onClick={() => { setShowDownload(false); handleDownloadDocx(); }} />
                   <div className="px-3 py-2 text-[11px] text-slate-500 border-t border-slate-100 mt-1">
                     Scored <b className="text-emerald-600">{report.percent}%</b> on ATS · Optimized for <b>{resume.country}</b> · Compatible with <b>{report.compatibility.filter((c) => c.ok).length}/10</b> systems
                   </div>
