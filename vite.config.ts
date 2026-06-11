@@ -6,7 +6,7 @@ import { defineConfig } from "vite";
 import { viteSingleFile } from "vite-plugin-singlefile";
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname  = path.dirname(__filename);
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -18,10 +18,17 @@ export default defineConfig({
   },
   server: {
     proxy: {
-      '/api': {
-        target: 'http://localhost:3001',
+      "/api": {
+        target: "http://localhost:3001",
         changeOrigin: true,
       },
     },
+  },
+  optimizeDeps: {
+    // Pre-bundle pdfjs so the worker URL resolves at build time
+    include: ["pdfjs-dist"],
+  },
+  worker: {
+    format: "es",
   },
 });

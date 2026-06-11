@@ -20,7 +20,8 @@ export default async function handler(req: any, res: any) {
     return res.status(500).json({ error: 'GROQ_API_KEY not configured on server' });
   }
 
-  const { action, messages, model = 'llama-3.3-70b-versatile', temperature = 0.7, max_tokens = 4096 } = req.body;
+  const GROQ_MAX_TOKENS = 4096;
+  const { action, messages, model = 'llama-3.3-70b-versatile', temperature = 0.7, max_tokens = GROQ_MAX_TOKENS } = req.body;
 
   if (!action || !messages) {
     return res.status(400).json({ error: 'Missing required fields: action, messages' });

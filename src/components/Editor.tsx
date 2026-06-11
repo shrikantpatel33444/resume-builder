@@ -4,8 +4,14 @@ import { ArrowLeft, Download, FileText, Eye, Bot, Wand2, FileDown, Share2, Layer
 import type { ResumeData } from '../types';
 import { extractKeywords } from '../lib/keywords';
 import { scoreResume } from '../lib/atsEngine';
-import { autoFixResume as autoFixRuleBased, generateCoverLetter as coverLetterRuleBased } from '../lib/aiGenerator';
-import * as groq from '../lib/groq';
+import {
+  autoFixResumeLocally,
+  generateCoverLetterLocally,
+} from '../lib/aiGenerator';
+import {
+  autoFixResumeWithAI,
+  generateCoverLetterWithAI,
+} from '../lib/groq';
 import ATSScoreDashboard from './ATSScoreDashboard';
 import ResumePreview from './ResumePreview';
 import ResumeCanvas from './ResumeCanvas';
@@ -18,6 +24,7 @@ import Overview from './customize/Overview';
 import { saveResume, recordScore } from '../lib/storage';
 import { TEMPLATES } from '../lib/sampleData';
 import { customizationFromTemplate } from '../lib/customization';
+import { ATS_DOWNLOAD_THRESHOLD, MAX_HISTORY_ENTRIES } from '../lib/constants';
 
 interface Props {
   initial: ResumeData;
@@ -63,9 +70,9 @@ export default function Editor({ initial, onBack }: Props) {
       setHistory((prev) => {
         const trimmed = prev.slice(0, hIdx + 1);
         trimmed.push(next);
-        return trimmed.slice(-30);
+        return trimmed.slice(-MAX_HISTORY_ENTRIES);
       });
-      setHIdx((idx) => Math.min(29, idx + 1));
+      setHIdx((idx) => Math.min(MAX_HISTORY_ENTRIES - 1, idx + 1));
     }
   }, [hIdx]);
 
@@ -78,10 +85,26 @@ export default function Editor({ initial, onBack }: Props) {
     return () => clearTimeout(t);
   }, [resume, report.percent]);
 
-  // Close download menu when ATS score drops below 90 (gate)
+  // Close download menu when ATS score drops below threshold (gate)
   useEffect(() => {
-    if (report.percent < 90 && showDownload) setShowDownload(false);
+    if (report.percent < ATS_DOWNLOAD_THRESHOLD && showDownload) setShowDownload(false);
   }, [report.percent, showDownload]);
+
+  const undo = useCallback(() => {
+    if (hIdx > 0) {
+      const newIdx = hIdx - 1;
+      setHIdx(newIdx);
+      setResume(history[newIdx]);
+    }
+  }, [hIdx, history]);
+
+  const redo = useCallback(() => {
+    if (hIdx < history.length - 1) {
+      const newIdx = hIdx + 1;
+      setHIdx(newIdx);
+      setResume(history[newIdx]);
+    }
+  }, [hIdx, history]);
 
   // Close download dropdown & mobile menu on outside click / escape
   useEffect(() => {
@@ -100,21 +123,22 @@ export default function Editor({ initial, onBack }: Props) {
       document.removeEventListener('mousedown', onClick);
       document.removeEventListener('keydown', onKey);
     };
-  }); // run each render so undo/redo capture latest values
+  }, [undo, redo]); // undo/redo are stable useCallback refs
+
 
   const runAutoFix = async () => {
     setFixing(true);
     await new Promise((r) => setTimeout(r, 400));
     try {
-      const allBullets = resume.experience.flatMap(e => e.bullets).join('\n');
+      const allBullets = resume.experience.flatMap((e) => e.bullets).join('\n');
       const resumeText = `Job Title: ${resume.targetJobTitle || 'Professional'}\nSummary: ${resume.summary}\nExperience Bullets:\n${allBullets}\nSkills: ${[...resume.skills.technical, ...resume.skills.soft, ...resume.skills.tools].join(', ')}`;
       const allKw = [...keywords.critical, ...keywords.important];
-      const result = await groq.autoFixResume(resumeText, allKw, report.percent);
+      const result = await autoFixResumeWithAI(resumeText, allKw, report.percent);
       const fixed = { ...resume };
       if (result.summary) fixed.summary = result.summary;
       if (result.skills.length) {
-        const tech = result.skills.filter(s => !['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase()));
-        const soft = result.skills.filter(s => ['leadership','communication','teamwork','problem-solving','adaptability','creativity'].includes(s.toLowerCase()));
+        const tech = result.skills.filter((s) => !['leadership', 'communication', 'teamwork', 'problem-solving', 'adaptability', 'creativity'].includes(s.toLowerCase()));
+        const soft = result.skills.filter((s) => ['leadership', 'communication', 'teamwork', 'problem-solving', 'adaptability', 'creativity'].includes(s.toLowerCase()));
         fixed.skills = { ...fixed.skills, technical: tech.slice(0, 15), soft: soft.slice(0, 8) };
       }
       if (Object.keys(result.experienceBullets).length) {
@@ -125,28 +149,13 @@ export default function Editor({ initial, onBack }: Props) {
       }
       updateResume(fixed);
     } catch {
-      const { resume: fixed } = autoFixRuleBased(resume, keywords, 96);
+      const { resume: fixed } = autoFixResumeLocally(resume, keywords, 96);
       updateResume(fixed);
     }
     setFixing(false);
   };
 
-  const undo = () => {
-    if (hIdx > 0) {
-      const newIdx = hIdx - 1;
-      setHIdx(newIdx);
-      setResume(history[newIdx]);
-    }
-  };
-  const redo = () => {
-    if (hIdx < history.length - 1) {
-      const newIdx = hIdx + 1;
-      setHIdx(newIdx);
-      setResume(history[newIdx]);
-    }
-  };
-
-  const canDownload = report.percent >= 90;
+  const canDownload = report.percent >= ATS_DOWNLOAD_THRESHOLD;
   const safeFileName = (resume.contact.fullName || 'Resume').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '') || 'Resume';
 
   const handleDownloadPdf = (variant: 'ats' | 'visual') => {
@@ -179,16 +188,17 @@ export default function Editor({ initial, onBack }: Props) {
 
   const handleShare = async () => {
     try {
+      // Encode full resume data — don't truncate
       const data = btoa(unescape(encodeURIComponent(JSON.stringify(resume))));
-      const link = `${location.origin}${location.pathname}#share=${data.slice(0, 80)}…`;
+      const link = `${location.origin}${location.pathname}#share=${data}`;
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(link);
-        alert('Shareable link copied to clipboard (7-day demo link).');
+        alert('Shareable link copied to clipboard.');
       } else {
         prompt('Copy your shareable link:', link);
       }
     } catch {
-      // ignore
+      alert('Could not copy link. Please try again.');
     }
   };
 
@@ -524,29 +534,29 @@ function TemplateSwitcher({ resume, onChange, onBrowseAll }: { resume: ResumeDat
    ContentEditor mounted in the Content tab (see src/components/customize/ContentEditor.tsx). */
 
 function CoverLetterPanel({ resume, keywords }: { resume: ResumeData; keywords: ReturnType<typeof extractKeywords> }) {
-  const [text, setText] = useState(() => coverLetterRuleBased(resume, keywords));
+  const [text, setText] = useState(() => generateCoverLetterLocally(resume, keywords));
   const [edited, setEdited] = useState(false);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
-    if (!edited && !generating) setText(coverLetterRuleBased(resume, keywords));
+    if (!edited && !generating) setText(generateCoverLetterLocally(resume, keywords));
   }, [resume, keywords, edited, generating]);
 
   const regenerate = async () => {
     setGenerating(true);
     try {
-      const allKw = [...keywords.critical, ...keywords.important];
-      const allBullets = resume.experience.flatMap(e => e.bullets);
-      const result = await groq.generateCoverLetter(
+      const allKw     = [...keywords.critical, ...keywords.important];
+      const allBullets = resume.experience.flatMap((e) => e.bullets);
+      const result = await generateCoverLetterWithAI(
         resume.contact.fullName,
         resume.targetJobTitle || 'Professional',
         allKw,
         resume.summary,
-        allBullets
+        allBullets,
       );
       setText(result);
     } catch {
-      setText(coverLetterRuleBased(resume, keywords));
+      setText(generateCoverLetterLocally(resume, keywords));
     }
     setEdited(false);
     setGenerating(false);

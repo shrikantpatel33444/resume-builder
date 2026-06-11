@@ -21,8 +21,13 @@ interface ExtractResult {
 
 async function extractPdf(file: File): Promise<ExtractResult> {
   const pdfjs: any = await import('pdfjs-dist/build/pdf.mjs');
-  const workerSrc = `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.mjs`;
-  pdfjs.GlobalWorkerOptions.workerSrc = workerSrc;
+  // Use the locally bundled worker first; fall back to CDN if not available.
+  // This prevents parse failures when CDN is down or on slow connections.
+  const localWorker = new URL(
+    'pdfjs-dist/build/pdf.worker.mjs',
+    import.meta.url,
+  ).toString();
+  pdfjs.GlobalWorkerOptions.workerSrc = localWorker || `https://cdn.jsdelivr.net/npm/pdfjs-dist@${pdfjs.version}/build/pdf.worker.mjs`;
 
   const buf = await file.arrayBuffer();
   const pdf = await pdfjs.getDocument({ data: buf }).promise;

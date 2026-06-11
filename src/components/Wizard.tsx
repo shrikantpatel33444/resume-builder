@@ -4,8 +4,8 @@ import { ArrowRight, ArrowLeft, FileUp, Pencil, Link2, Sparkles, X, Globe2 } fro
 import type { Country, ResumeData } from '../types';
 import { extractKeywords, extractJobTitle } from '../lib/keywords';
 import { scoreResume } from '../lib/atsEngine';
-import { generateResume as generateRuleBased } from '../lib/aiGenerator';
-import * as groq from '../lib/groq';
+import { generateResumeLocally } from '../lib/aiGenerator';
+import { generateResumeWithAI } from '../lib/groq';
 import { emptyResume, SAMPLE_JOB_DESCRIPTION } from '../lib/sampleData';
 import { COUNTRY_FLAGS } from '../lib/format';
 import { parseCv } from '../lib/cvParser';
@@ -108,7 +108,7 @@ export default function Wizard({ onComplete, onCancel }: Props) {
         const expInput = base.experience.map(e => ({
           title: e.title, company: e.company, years: e.startDate || '', bullets: e.bullets,
         }));
-        const result = await groq.generateResume(
+        const result = await generateResumeWithAI(
           base.targetJobTitle || 'Professional',
           base.jobDescription || '',
           allKw,
@@ -127,11 +127,11 @@ export default function Wizard({ onComplete, onCancel }: Props) {
           if (bullets?.length && base.experience[i]) base.experience[i].bullets = bullets.slice(0, 6);
         });
       } else {
-        const generated = generateRuleBased(base, keywords!);
+        const generated = generateResumeLocally(base, keywords!);
         base = generated;
       }
     } catch {
-      const generated = generateRuleBased(base, keywords!);
+      const generated = generateResumeLocally(base, keywords!);
       base = generated;
     }
 
