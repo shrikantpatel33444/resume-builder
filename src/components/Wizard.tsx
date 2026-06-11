@@ -141,7 +141,7 @@ export default function Wizard({ onComplete, onCancel }: Props) {
 
   const useSampleJD = () => setJd(SAMPLE_JOB_DESCRIPTION);
 
-  const canNext = step === 0 ? jd.trim().length > 30 : true;
+  const canNext = true; // JD is now optional — user can skip
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-start sm:items-center justify-center p-2 sm:p-4 overflow-y-auto">
@@ -172,10 +172,13 @@ export default function Wizard({ onComplete, onCancel }: Props) {
           <AnimatePresence mode="wait">
             {step === 0 && (
               <motion.div key="s0" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}>
-                <h2 className="text-xl font-bold text-slate-900 mb-1">Paste the Job Description</h2>
-                <p className="text-sm text-slate-500 mb-3">We'll extract critical keywords your resume MUST contain to score 90%+ on ATS.</p>
+                <h2 className="text-xl font-bold text-slate-900 mb-1">Paste the Job Description <span className="text-sm font-normal text-slate-400">(Optional)</span></h2>
+                <p className="text-sm text-slate-500 mb-3">We'll extract critical keywords your resume MUST contain to score 90%+ on ATS. <span className="text-indigo-600 font-medium">Skip if you want a general-purpose CV.</span></p>
                 <div className="flex items-center gap-2 mb-2">
                   <button onClick={useSampleJD} className="text-xs px-2 py-1 rounded-full bg-indigo-50 text-indigo-700 hover:bg-indigo-100">Use sample</button>
+                  {jd.trim().length > 0 && (
+                    <button onClick={() => setJd('')} className="text-xs px-2 py-1 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200">Clear</button>
+                  )}
                 </div>
                 <textarea
                   value={jd}
@@ -346,23 +349,33 @@ export default function Wizard({ onComplete, onCancel }: Props) {
           >
             <ArrowLeft className="w-4 h-4" /> Back
           </button>
-          {step < 2 ? (
-            <button
-              onClick={() => canNext && setStep((s) => s + 1)}
-              disabled={!canNext}
-              className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow hover:shadow-lg flex items-center gap-1 disabled:opacity-50"
-            >
-              Continue <ArrowRight className="w-4 h-4" />
-            </button>
-          ) : (
-            <button
-              onClick={handleGenerate}
-              disabled={generating}
-              className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow hover:shadow-lg flex items-center gap-1 disabled:opacity-60"
-            >
-              <Sparkles className="w-4 h-4" /> {generating ? 'Generating ATS-Optimized Resume…' : 'Generate Resume'}
-            </button>
-          )}
+          <div className="flex items-center gap-2">
+            {step === 0 && (
+              <button
+                onClick={() => { setJd(''); setStep(1); }}
+                className="text-slate-500 font-medium px-4 py-2 rounded-lg hover:bg-slate-100 text-sm"
+              >
+                Skip
+              </button>
+            )}
+            {step < 2 ? (
+              <button
+                onClick={() => canNext && setStep((s) => s + 1)}
+                disabled={!canNext}
+                className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow hover:shadow-lg flex items-center gap-1 disabled:opacity-50"
+              >
+                {step === 0 && jd.trim().length === 0 ? 'Continue without JD' : 'Continue'} <ArrowRight className="w-4 h-4" />
+              </button>
+            ) : (
+              <button
+                onClick={handleGenerate}
+                disabled={generating}
+                className="bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-semibold px-5 py-2.5 rounded-xl shadow hover:shadow-lg flex items-center gap-1 disabled:opacity-60"
+              >
+                <Sparkles className="w-4 h-4" /> {generating ? 'Generating ATS-Optimized Resume…' : 'Generate Resume'}
+              </button>
+            )}
+          </div>
         </div>
       </motion.div>
     </div>

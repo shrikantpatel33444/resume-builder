@@ -85,10 +85,7 @@ export default function Editor({ initial, onBack }: Props) {
     return () => clearTimeout(t);
   }, [resume, report.percent]);
 
-  // Close download menu when ATS score drops below threshold (gate)
-  useEffect(() => {
-    if (report.percent < ATS_DOWNLOAD_THRESHOLD && showDownload) setShowDownload(false);
-  }, [report.percent, showDownload]);
+  // (Download no longer gated by ATS score)
 
   const undo = useCallback(() => {
     if (hIdx > 0) {
@@ -155,7 +152,7 @@ export default function Editor({ initial, onBack }: Props) {
     setFixing(false);
   };
 
-  const canDownload = report.percent >= ATS_DOWNLOAD_THRESHOLD;
+  // Download is always available — no ATS score gate needed
   const safeFileName = (resume.contact.fullName || 'Resume').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '') || 'Resume';
 
   const handleDownloadPdf = (variant: 'ats' | 'visual') => {
@@ -257,36 +254,34 @@ export default function Editor({ initial, onBack }: Props) {
             </AnimatePresence>
           </div>
 
-          {/* Download — always visible */}
+          {/* Download — always available */}
           <div className="relative shrink-0" ref={downloadRef}>
             <button
-              onClick={() => canDownload && setShowDownload((s) => !s)}
-              disabled={!canDownload}
-              className={`px-3 sm:px-4 py-2 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition ${
-                canDownload
-                  ? report.percent >= 95
-                    ? 'bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow hover:shadow-lg ring-2 ring-emerald-200'
-                    : 'bg-gradient-to-r from-yellow-400 to-amber-500 text-white shadow'
-                  : 'bg-slate-200 text-slate-400 cursor-not-allowed'
-              }`}
-              title={canDownload ? 'Download resume' : 'Fix ATS issues to enable download'}
+              onClick={() => setShowDownload((s) => !s)}
+              className="px-3 sm:px-4 py-2 rounded-xl font-semibold text-xs sm:text-sm flex items-center gap-1.5 transition bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow hover:shadow-lg"
+              title="Download resume"
             >
               <Download className="w-4 h-4" />
-              <span className="hidden sm:inline">{canDownload ? 'Download' : 'Fix ATS First'}</span>
-              <span className="sm:hidden">{canDownload ? 'PDF' : 'Fix'}</span>
+              <span className="hidden sm:inline">Download</span>
+              <span className="sm:hidden">PDF</span>
             </button>
             <AnimatePresence>
-              {showDownload && canDownload && (
+              {showDownload && (
                 <motion.div
                   initial={{ opacity: 0, y: -8 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -8 }}
                   className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-100 p-2 z-40"
                 >
+                  {report.percent < ATS_DOWNLOAD_THRESHOLD && (
+                    <div className="px-3 py-2 mb-1 rounded-xl bg-amber-50 border border-amber-100">
+                      <p className="text-xs text-amber-700 font-medium">⚠️ ATS score {report.percent}% — fix issues to improve chances</p>
+                    </div>
+                  )}
                   <DownloadItem icon={<FileDown className="text-emerald-600" />} title="ATS PDF" desc="For online job portals" onClick={() => { setShowDownload(false); handleDownloadPdf('ats'); }} />
                   <DownloadItem icon={<FileDown className="text-indigo-600" />} title="Visual PDF" desc="For email / in-person" onClick={() => { setShowDownload(false); handleDownloadPdf('visual'); }} />
                   <DownloadItem icon={<FileText className="text-slate-600" />} title="Plain Text (.txt)" desc="Most ATS-friendly" onClick={() => { setShowDownload(false); handleDownloadTxt(); }} />
-                  <DownloadItem icon={<Share2 className="text-violet-600" />} title="Share Link (7 days)" desc="Send to recruiters" onClick={() => { setShowDownload(false); handleShare(); }} />
+                  <DownloadItem icon={<Share2 className="text-violet-600" />} title="Share Link" desc="Send to recruiters" onClick={() => { setShowDownload(false); handleShare(); }} />
                   <div className="px-3 py-2 text-[11px] text-slate-500 border-t border-slate-100 mt-1">
                     Scored <b className="text-emerald-600">{report.percent}%</b> on ATS · Optimized for <b>{resume.country}</b> · Compatible with <b>{report.compatibility.filter((c) => c.ok).length}/10</b> systems
                   </div>
