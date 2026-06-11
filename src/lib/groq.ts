@@ -10,11 +10,15 @@ async function callAPI(
   messages: { role: string; content: string }[],
   parseJson = false,
 ): Promise<string> {
+  const ac = new AbortController();
+  const timer = setTimeout(() => ac.abort(), 30000);
   const res = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ action, messages }),
+    signal: ac.signal,
   });
+  clearTimeout(timer);
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({ error: 'Request failed' }));

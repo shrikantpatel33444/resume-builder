@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, ArrowLeft, FileUp, Pencil, Link2, Sparkles, X, Globe2 } from 'lucide-react';
-import type { Country, ResumeData } from '../types';
+import type { Country, KeywordTier, ResumeData } from '../types';
 import { extractKeywords, extractJobTitle } from '../lib/keywords';
 import { scoreResume } from '../lib/atsEngine';
 import { generateResumeLocally } from '../lib/aiGenerator';
@@ -71,6 +71,8 @@ export default function Wizard({ onComplete, onCancel }: Props) {
     setGenerating(true);
     await new Promise((res) => setTimeout(res, 400));
     let base: ResumeData;
+    const emptyKw: KeywordTier = { critical: [], important: [], niceToHave: [] };
+    const activeKeywords = keywords || emptyKw;
 
     if (parsedResume && method === 'upload') {
       base = JSON.parse(JSON.stringify(parsedResume));
@@ -103,7 +105,7 @@ export default function Wizard({ onComplete, onCancel }: Props) {
     }
 
     try {
-      if (keywords) {
+      if (keywords && keywords.critical.length + keywords.important.length > 0) {
         const allKw = [...keywords.critical, ...keywords.important];
         const expInput = base.experience.map(e => ({
           title: e.title, company: e.company, years: e.startDate || '', bullets: e.bullets,
@@ -127,15 +129,15 @@ export default function Wizard({ onComplete, onCancel }: Props) {
           if (bullets?.length && base.experience[i]) base.experience[i].bullets = bullets.slice(0, 6);
         });
       } else {
-        const generated = generateResumeLocally(base, keywords!);
-        base = generated;
+        base = generateResumeLocally(base, activeKeywords);
       }
-    } catch {
-      const generated = generateResumeLocally(base, keywords!);
-      base = generated;
+    } catch (err) {
+      console.error('Resume generation error, using local fallback:', err);
+      alert('AI generation timed out or failed. Using local fallback to generate your resume.');
+      base = generateResumeLocally(base, activeKeywords);
+    } finally {
+      setGenerating(false);
     }
-
-    setGenerating(false);
     onComplete(base);
   };
 
